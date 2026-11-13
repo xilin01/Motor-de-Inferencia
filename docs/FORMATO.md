@@ -81,3 +81,16 @@ guarda los bytes tal cual, de modo que decodificar es concatenar.
 **Fusiones como ids.** El `merges.txt` original guarda pares de cadenas. Aquí cada fusión es un
 trío de ids `(izquierda, derecha, resultado)`. La posición en la lista es la prioridad: la primera
 fusión es la que se aplica antes.
+
+## `ref_logits.bin`: referencia para los tests
+
+Lo genera `tools/referencias.py` con PyTorch. No forma parte del motor.
+
+| Tipo                                    | Campo                                               |
+|-----------------------------------------|-----------------------------------------------------|
+| `char[8]`                               | magia `GPT2REFL`                                    |
+| `uint32`                                | `n_casos`                                           |
+| por caso: `uint32`                      | `n_tokens`                                          |
+| por caso: `int32[n_tokens]`             | ids de entrada                                      |
+| por caso: `float32[n_tokens × n_vocab]` | logits de PyTorch en float32                        |
+| por caso: `float32[n_tokens × n_vocab]` | logits de PyTorch en float64, redondeados a float32 |
