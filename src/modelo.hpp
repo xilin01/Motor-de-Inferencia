@@ -1,8 +1,10 @@
 // GPT-2: del vector de ids de token a los logits del siguiente token.
 #pragma once
+#include "hilos.hpp"
 #include "operaciones.hpp"
 #include "pesos.hpp"
 
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -28,6 +30,7 @@ enum class Matmul { Ingenua, Avx2 };
 // Variante de cálculo. No cambia qué se calcula, solo cómo.
 struct Opciones {
     Matmul matmul = Matmul::Ingenua;  // implementación de las capas lineales
+    int hilos = 1;                    // hilos entre los que se reparte cada capa lineal
 };
 
 class Modelo {
@@ -36,7 +39,8 @@ public:
     // Empieza con las opciones por defecto: todo ingenuo.
     explicit Modelo(Pesos pesos);
 
-    // Cambia la variante de cálculo. Lanza std::runtime_error si se pide AVX2 y la CPU no lo tiene.
+    // Cambia la variante de cálculo. Lanza std::runtime_error si se pide AVX2 y la CPU no lo tiene,
+    // y std::invalid_argument si hilos no está entre 1 y 256.
     void configurar(const Opciones& opciones);
 
     // Forward ingenuo: recalcula todo el contexto. Devuelve los logits de todas las posiciones,
@@ -61,6 +65,7 @@ private:
     void lineal(const float* x, size_t n_filas, size_t n_in, const float* w, const float* b, size_t n_out, float* y) const;
 
     Lineal nucleo_ = lineal_ingenua;
+    std::unique_ptr<Hilos> hilos_;  // vacío con un solo hilo
 
     Pesos pesos_;
     const float *wte_, *wpe_, *lnf_g_, *lnf_b_;

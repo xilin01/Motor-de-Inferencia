@@ -3,10 +3,12 @@
 #include "generar.hpp"
 #include "tokenizador.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -23,7 +25,8 @@ const char* const USO =
     "  --modelo RUTA     archivo de pesos (por defecto modelos/gpt2_124M.bin)\n"
     "  --vocab RUTA      archivo de vocabulario (por defecto modelos/gpt2_vocab.bin)\n"
     "  --sin-cache       desactiva el KV cache: recalcula todo el contexto en cada token\n"
-    "  --matmul M        ingenua o avx2 (por defecto avx2 si la CPU lo soporta)\n";
+    "  --matmul M        ingenua o avx2 (por defecto avx2 si la CPU lo soporta)\n"
+    "  --hilos N         hilos para las capas lineales (por defecto 6, o los que tenga la CPU si son menos)\n";
 
 // Windows entrega los argumentos en UTF-16; el motor trabaja en UTF-8.
 std::string a_utf8(const wchar_t* w) {
@@ -63,6 +66,8 @@ int wmain(int argc, wchar_t** argv) {
     bool hay_prompt = false, kv_cache = true;
     Opciones opciones;  // por defecto, lo más rápido que soporte la máquina
     if (cpu_tiene_avx2_fma()) opciones.matmul = Matmul::Avx2;
+    // En la máquina donde se midió, más de 6 hilos no mejora: el límite es la memoria (ver README).
+    opciones.hilos = static_cast<int>(std::clamp(std::thread::hardware_concurrency(), 1u, 6u));
 
     try {
         for (int i = 1; i < argc; ++i) {
@@ -92,6 +97,8 @@ int wmain(int argc, wchar_t** argv) {
                 const std::string m = a_utf8(valor);
                 if (m != "ingenua" && m != "avx2") throw std::invalid_argument("--matmul debe ser ingenua o avx2");
                 opciones.matmul = m == "avx2" ? Matmul::Avx2 : Matmul::Ingenua;
+            } else if (opcion == "--hilos") {
+                opciones.hilos = std::stoi(valor);
             } else {
                 throw std::invalid_argument("opción desconocida: " + opcion);
             }

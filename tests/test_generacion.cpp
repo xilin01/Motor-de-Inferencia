@@ -56,7 +56,7 @@ void probar_muestreo() {
     COMPROBAR(f[0] > 0.0f);
 }
 
-// uso: test_generacion [ingenua|avx2]
+// uso: test_generacion [ingenua|avx2] [hilos]
 int main(int argc, char** argv) {
     probar_muestreo();
 

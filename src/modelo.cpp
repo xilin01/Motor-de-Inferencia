@@ -31,11 +31,25 @@ Modelo::Modelo(Pesos pesos) : pesos_(std::move(pesos)) {
 
 void Modelo::configurar(const Opciones& opciones) {
     if (opciones.matmul == Matmul::Avx2 && !cpu_tiene_avx2_fma()) throw std::runtime_error("esta CPU no soporta AVX2 y FMA");
+    if (opciones.hilos < 1 || opciones.hilos > 256) throw std::invalid_argument("el número de hilos debe estar entre 1 y 256");
     nucleo_ = opciones.matmul == Matmul::Avx2 ? lineal_avx2 : lineal_ingenua;
+    if (opciones.hilos == 1) hilos_.reset();
+    else if (!hilos_ || hilos_->n() != opciones.hilos) hilos_ = std::make_unique<Hilos>(opciones.hilos);
 }
 
 void Modelo::lineal(const float* x, size_t n_filas, size_t n_in, const float* w, const float* b, size_t n_out, float* y) const {
-    nucleo_(x, n_filas, n_in, w, b, n_out, y, 0, n_out);
+    // Se reparten todas las capas, también las pequeñas: medido, dejar alguna en un solo hilo
+    // empeora el total (110 tokens/s repartiendo todas frente a 104 sin la de 768x768, 6 hilos).
+    if (!hilos_) {
+        nucleo_(x, n_filas, n_in, w, b, n_out, y, 0, n_out);
+        return;
+    }
+    // Se reparten las neuronas de salida: cada hilo escribe posiciones distintas de y y solo lee
+    // x y w, así que no hace falta ningún cerrojo. Trozos pequeños (8 por hilo) y reparto sobre
+    // la marcha, porque los núcleos P y E no van a la misma velocidad. Múltiplos de 4 para no
+    // romper los grupos de 4 neuronas del núcleo AVX2.
+    const size_t trozo = (n_out / (static_cast<size_t>(hilos_->n()) * 8) / 4 + 1) * 4;
+    hilos_->paralelo(n_out, trozo, [&](size_t ini, size_t fin) { nucleo_(x, n_filas, n_in, w, b, n_out, y, ini, fin); });
 }
 
 void Modelo::comprobar(size_t n_previos, std::span<const int> ids) const {

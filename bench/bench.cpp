@@ -20,10 +20,17 @@ struct Variante {
     Opciones opciones;
 };
 
+// Cada paso de optimización se suma a los anteriores. El barrido de hilos va al final.
 const Variante VARIANTES[] = {
-    {"Ingenua, sin cache", false, {Matmul::Ingenua}},
-    {"+ KV cache", true, {Matmul::Ingenua}},
-    {"+ AVX2 y FMA", true, {Matmul::Avx2}},
+    {"Ingenua, sin cache", false, {Matmul::Ingenua, 1}},
+    {"+ KV cache", true, {Matmul::Ingenua, 1}},
+    {"+ AVX2 y FMA", true, {Matmul::Avx2, 1}},
+    {"+ hilos", true, {Matmul::Avx2, 2}},
+    {"+ hilos", true, {Matmul::Avx2, 4}},
+    {"+ hilos", true, {Matmul::Avx2, 6}},
+    {"+ hilos", true, {Matmul::Avx2, 8}},
+    {"+ hilos", true, {Matmul::Avx2, 14}},
+    {"+ hilos", true, {Matmul::Avx2, 20}},
 };
 
 // Tokens por segundo de una generación de n_tokens: mediana de las repeticiones.
@@ -62,20 +69,21 @@ int main(int argc, char** argv) {
         const std::vector<int> prompt = tok.codificar(PROMPT);
 
         std::printf("prompt de %zu tokens, %d tokens generados, mediana de %d repeticiones\n\n", prompt.size(), n_tokens, repeticiones);
-        std::printf("| Variante | tokens/s | Frente a la anterior | Frente a la base |\n|---|---:|---:|---:|\n");
-        double base = 0.0, anterior = 0.0;
+        std::printf("| Variante | Hilos | tokens/s | Frente a la base | Frente a 1 hilo |\n|---|---:|---:|---:|---:|\n");
+        double base = 0.0, un_hilo = 0.0;  // velocidades de referencia; 0 mientras no se hayan medido
         for (const Variante& v : VARIANTES) {
             if (!v.kv_cache && !con_base) continue;
             modelo.configurar(v.opciones);
             const double velocidad = medir(modelo, prompt, n_tokens, repeticiones, v.kv_cache);
-            std::printf("| %s | %.2f |", v.nombre, velocidad);
-            if (anterior > 0.0) std::printf(" x%.2f |", velocidad / anterior);
+            if (!v.kv_cache) base = velocidad;
+            if (v.opciones.matmul == Matmul::Avx2 && v.opciones.hilos == 1) un_hilo = velocidad;
+
+            std::printf("| %s | %d | %.2f |", v.nombre, v.opciones.hilos, velocidad);
+            if (base > 0.0) std::printf(" x%.1f |", velocidad / base);
             else std::printf(" |");
-            if (base > 0.0) std::printf(" x%.1f |\n", velocidad / base);
+            if (v.opciones.hilos > 1) std::printf(" x%.2f |\n", velocidad / un_hilo);
             else std::printf(" |\n");
             std::fflush(stdout);
-            if (!v.kv_cache) base = velocidad;
-            anterior = velocidad;
         }
     } catch (const std::exception& e) {
         std::fprintf(stderr, "error: %s\n", e.what());

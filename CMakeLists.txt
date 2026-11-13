@@ -12,7 +12,7 @@ add_compile_options(/W4 /utf-8)
 
 # Todo el motor va en una biblioteca estática que comparten la CLI, los tests y el benchmark.
 add_library(motor STATIC src/pesos.cpp src/tokenizador.cpp src/operaciones.cpp src/modelo.cpp src/generar.cpp
-                         src/cpu.cpp src/lineal_avx2.cpp)
+                         src/cpu.cpp src/lineal_avx2.cpp src/hilos.cpp)
 target_include_directories(motor PUBLIC src)
 # AVX2 y FMA solo en el archivo de la capa lineal vectorizada. El resto se compila para x64 base
 # (SSE2): así la versión ingenua sigue siendo escalar y el binario arranca en cualquier CPU x64.
@@ -37,10 +37,12 @@ prueba(test_humo)
 prueba(test_pesos)
 prueba(test_tokenizador)
 prueba(test_lineal)
+prueba(test_hilos)
 prueba(test_logits)
 prueba(test_generacion)
 
-# Los mismos tests del modelo para cada variante: camino incremental (KV cache) y capa lineal AVX2.
+# Los mismos tests del modelo para cada variante: camino incremental (KV cache), capa lineal AVX2 y
+# varios hilos.
 function(variante nombre)
     add_test(NAME ${nombre} COMMAND ${ARGN} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endfunction()
@@ -48,3 +50,7 @@ variante(test_logits_incremental      test_logits incremental)
 variante(test_logits_avx2             test_logits completo avx2)
 variante(test_logits_incremental_avx2 test_logits incremental avx2)
 variante(test_generacion_avx2         test_generacion avx2)
+variante(test_logits_avx2_hilos             test_logits completo avx2 8)
+variante(test_logits_incremental_avx2_hilos test_logits incremental avx2 8)
+variante(test_logits_incremental_ingenua_hilos test_logits incremental ingenua 8)
+variante(test_generacion_avx2_hilos         test_generacion avx2 8)

@@ -1,7 +1,7 @@
 // Compara los logits del motor con los de PyTorch en todas las posiciones de cada caso de referencia.
 // El archivo modelos/ref_logits.bin lo genera tools/referencias.py.
 //
-// uso: test_logits [completo|incremental] [ingenua|avx2]
+// uso: test_logits [completo|incremental] [ingenua|avx2] [hilos]
 //   completo:     Modelo::forward sobre el contexto entero (por defecto).
 //   incremental:  Modelo::avanzar con KV cache, dando los tokens en trozos de 1 a 3.
 //
@@ -59,13 +59,14 @@ bool lanza(F&& f) {
 int main(int argc, char** argv) {
     const std::string modo = argc > 1 ? argv[1] : "completo";
     if (modo != "completo" && modo != "incremental") {
-        std::fprintf(stderr, "uso: test_logits [completo|incremental] [ingenua|avx2]\n");
+        std::fprintf(stderr, "uso: test_logits [completo|incremental] [ingenua|avx2] [hilos]\n");
         return 2;
     }
     const bool incremental = modo == "incremental";
 
     Modelo modelo(cargar_pesos("modelos/gpt2_124M.bin"));
-    modelo.configurar(leer_variante(argc, argv, 2));
+    const Opciones variante = leer_variante(argc, argv, 2);
+    modelo.configurar(variante);
     const size_t V = modelo.config().n_vocab;
 
     std::ifstream f("modelos/ref_logits.bin", std::ios::binary);
@@ -74,7 +75,7 @@ int main(int argc, char** argv) {
     const uint32_t n_casos = leer<uint32_t>(f, 1)[0];
     COMPROBAR(n_casos == 7);
 
-    std::printf("modo %s, matmul %s\n", modo.c_str(), argc > 2 ? argv[2] : "ingenua");
+    std::printf("modo %s, matmul %s, %d hilos\n", modo.c_str(), argc > 2 ? argv[2] : "ingenua", variante.hilos);
     std::printf("tokens | motor vs PyTorch f32 | motor vs float64 | PyTorch f32 vs float64\n");
     for (uint32_t c = 0; c < n_casos; ++c) {
         const uint32_t n = leer<uint32_t>(f, 1)[0];
@@ -91,6 +92,14 @@ int main(int argc, char** argv) {
         // La caché no cambia ninguna operación, solo evita repetirlas: en los casos cortos se exige
         // que los logits incrementales sean idénticos bit a bit a los del forward completo.
         if (incremental && n <= 64) COMPROBAR(logits == modelo.forward(ids));
+
+        // Los hilos se reparten neuronas de salida y cada neurona se calcula igual la coja quien la
+        // coja: con varios hilos el resultado debe ser idéntico bit a bit al de un solo hilo.
+        if (variante.hilos > 1 && n <= 64) {
+            modelo.configurar({variante.matmul, 1});
+            COMPROBAR(logits == modelo.forward(ids));
+            modelo.configurar(variante);
+        }
     }
 
     // Entradas inválidas: contexto vacío, demasiado largo e id fuera del vocabulario.
