@@ -37,11 +37,14 @@ int elegir_token(std::span<const float> logits, const Muestreo& muestreo, std::m
 }
 
 std::vector<int> generar(const Modelo& modelo, std::vector<int> ids, int n_nuevos, const Muestreo& muestreo,
-                         int id_parada, const std::function<void(int)>& al_generar) {
+                         int id_parada, const std::function<void(int)>& al_generar, bool kv_cache) {
     std::mt19937_64 azar(muestreo.semilla);
+    Cache cache;
     for (int i = 0; i < n_nuevos && ids.size() < modelo.config().n_ctx; ++i) {
-        // Sin caché: cada token nuevo recalcula el contexto entero.
-        const std::vector<float> logits = modelo.forward(ids, true);
+        // Con caché solo se procesan los tokens que aún no están en ella: el prompt entero en el
+        // primer paso y después únicamente el último token generado. Sin caché, todo cada vez.
+        const std::vector<float> logits = kv_cache ? modelo.avanzar(cache, std::span(ids).subspan(cache.n), true)
+                                                   : modelo.forward(ids, true);
         const int id = elegir_token(logits, muestreo, azar);
         ids.push_back(id);
         if (al_generar) al_generar(id);

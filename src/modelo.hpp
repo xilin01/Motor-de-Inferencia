@@ -15,6 +15,13 @@ struct Capa {
     const float *mlp_proy_w, *mlp_proy_b;  // [C, 4C]: segunda capa del MLP
 };
 
+// KV cache: claves y valores de atención de las posiciones ya procesadas, por capa.
+// Una caché vacía (recién construida) representa un contexto sin tokens.
+struct Cache {
+    size_t n = 0;                                    // posiciones ya procesadas
+    std::vector<std::vector<float>> claves, valores;  // por capa: [n, C] en fila-mayor
+};
+
 class Modelo {
 public:
     // Se queda con los pesos y comprueba que cada tensor tiene la forma que dice la configuración.
@@ -27,9 +34,17 @@ public:
     // Lanza std::invalid_argument si ids está vacío, supera n_ctx o contiene un id inválido.
     std::vector<float> forward(std::span<const int> ids, bool solo_ultima = false) const;
 
+    // Forward incremental: procesa solo los tokens nuevos, que ocupan las posiciones siguientes a
+    // las cache.n ya procesadas, y añade sus claves y valores a la caché. Devuelve los logits de
+    // los tokens nuevos, [nuevos.size(), n_vocab], o solo los del último con solo_ultima.
+    // Lanza std::invalid_argument con las mismas condiciones que forward; la caché queda intacta.
+    std::vector<float> avanzar(Cache& cache, std::span<const int> nuevos, bool solo_ultima = false) const;
+
     const Config& config() const { return pesos_.config; }
 
 private:
+    void comprobar(size_t n_previos, std::span<const int> ids) const;
+
     Pesos pesos_;
     const float *wte_, *wpe_, *lnf_g_, *lnf_b_;
     std::vector<Capa> capas_;

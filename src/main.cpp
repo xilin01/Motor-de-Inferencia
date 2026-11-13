@@ -20,7 +20,8 @@ const char* const USO =
     "  --top-k K         sortear solo entre los K tokens más probables (0 = todos)\n"
     "  --semilla S       semilla del sorteo (por defecto 0)\n"
     "  --modelo RUTA     archivo de pesos (por defecto modelos/gpt2_124M.bin)\n"
-    "  --vocab RUTA      archivo de vocabulario (por defecto modelos/gpt2_vocab.bin)\n";
+    "  --vocab RUTA      archivo de vocabulario (por defecto modelos/gpt2_vocab.bin)\n"
+    "  --sin-cache       desactiva el KV cache: recalcula todo el contexto en cada token\n";
 
 // Windows entrega los argumentos en UTF-16; el motor trabaja en UTF-8.
 std::string a_utf8(const wchar_t* w) {
@@ -57,11 +58,15 @@ int wmain(int argc, wchar_t** argv) {
     std::filesystem::path ruta_modelo = "modelos/gpt2_124M.bin", ruta_vocab = "modelos/gpt2_vocab.bin";
     int n_tokens = 100;
     Muestreo muestreo;
-    bool hay_prompt = false;
+    bool hay_prompt = false, kv_cache = true;
 
     try {
         for (int i = 1; i < argc; ++i) {
             const std::string opcion = a_utf8(argv[i]);
+            if (opcion == "--sin-cache") {
+                kv_cache = false;
+                continue;
+            }
             if (i + 1 >= argc) throw std::invalid_argument("falta el valor de " + opcion);
             const wchar_t* valor = argv[++i];
             if (opcion == "--prompt") {
@@ -111,7 +116,7 @@ int wmain(int argc, wchar_t** argv) {
             std::fwrite(pendiente.data(), 1, n, stdout);
             std::fflush(stdout);
             pendiente.erase(0, n);
-        });
+        }, kv_cache);
         const double segundos = std::chrono::duration<double>(std::chrono::steady_clock::now() - inicio).count();
         std::fputs(pendiente.c_str(), stdout);
         std::fputs("\n", stdout);

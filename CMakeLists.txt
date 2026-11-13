@@ -34,3 +34,6 @@ prueba(test_pesos)
 prueba(test_tokenizador)
 prueba(test_logits)
 prueba(test_generacion)
+
+# El mismo test de logits por el camino incremental (KV cache).
+add_test(NAME test_logits_incremental COMMAND test_logits incremental WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

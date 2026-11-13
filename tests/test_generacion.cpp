@@ -73,7 +73,8 @@ int main() {
         for (int id : leer_ids(linea_esperados)) esperados.push_back(id);
         const int n_nuevos = static_cast<int>(esperados.size() - prompt.size());
 
-        COMPROBAR(generar(modelo, prompt, n_nuevos, {}) == esperados);
+        COMPROBAR(generar(modelo, prompt, n_nuevos, {}, -1, {}, true) == esperados);   // con KV cache
+        COMPROBAR(generar(modelo, prompt, n_nuevos, {}, -1, {}, false) == esperados);  // sin caché
         ++casos;
     }
     COMPROBAR(casos == 3);
@@ -87,6 +88,7 @@ int main() {
     COMPROBAR(a == generar(modelo, prompt, 4, sorteo));
     COMPROBAR(avisados == std::vector<int>(a.begin() + 2, a.end()));
     COMPROBAR(generar(modelo, prompt, 4, sorteo, a[2]).size() == 3);
+    COMPROBAR(a == generar(modelo, prompt, 4, sorteo, -1, {}, false));  // el sorteo no depende de la caché
 
     // Contexto lleno: no se añade nada.
     COMPROBAR(generar(modelo, std::vector<int>(1024, 0), 5, {}).size() == 1024);

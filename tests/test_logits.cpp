@@ -1,6 +1,10 @@
 // Compara los logits del motor con los de PyTorch en todas las posiciones de cada caso de referencia.
 // El archivo modelos/ref_logits.bin lo genera tools/referencias.py.
 //
+// uso: test_logits [completo|incremental]
+//   completo:     Modelo::forward sobre el contexto entero (por defecto).
+//   incremental:  Modelo::avanzar con KV cache, dando los tokens en trozos de 1 a 3.
+//
 // Tolerancia. El objetivo inicial era 1e-4 absoluto y no es alcanzable en float32: el propio PyTorch
 // en float32 se aparta del mismo modelo en float64 entre 5,7e-5 y 2,9e-4 en los prompts cortos y
 // 2,5e-3 con el contexto lleno. Umbrales acordados: 1e-3 en los prompts cortos (error medido del
@@ -13,6 +17,7 @@
 #include <cstring>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 
 // Mayor diferencia absoluta entre dos vectores.
 float error_maximo(const std::vector<float>& a, const std::vector<float>& b) {
@@ -29,7 +34,35 @@ std::vector<T> leer(std::ifstream& f, size_t n) {
     return v;
 }
 
-int main() {
+// Logits de todas las posiciones obtenidos con la caché, alimentando los tokens en trozos de
+// tamaños variados para ejercitar tanto el paso de un token como el de varios.
+std::vector<float> logits_incrementales(const Modelo& modelo, const std::vector<int>& ids) {
+    const size_t trozos[] = {3, 1, 1, 2, 1};
+    Cache cache;
+    std::vector<float> logits;
+    for (size_t i = 0, paso = 0; i < ids.size(); ++paso) {
+        const size_t m = std::min(trozos[paso % std::size(trozos)], ids.size() - i);
+        const std::vector<float> nuevos = modelo.avanzar(cache, std::span(ids).subspan(i, m));
+        logits.insert(logits.end(), nuevos.begin(), nuevos.end());
+        i += m;
+    }
+    return logits;
+}
+
+template <typename F>
+bool lanza(F&& f) {
+    try { f(); } catch (const std::invalid_argument&) { return true; }
+    return false;
+}
+
+int main(int argc, char** argv) {
+    const std::string modo = argc > 1 ? argv[1] : "completo";
+    if (modo != "completo" && modo != "incremental") {
+        std::fprintf(stderr, "uso: test_logits [completo|incremental]\n");
+        return 2;
+    }
+    const bool incremental = modo == "incremental";
+
     const Modelo modelo(cargar_pesos("modelos/gpt2_124M.bin"));
     const size_t V = modelo.config().n_vocab;
 
@@ -39,28 +72,40 @@ int main() {
     const uint32_t n_casos = leer<uint32_t>(f, 1)[0];
     COMPROBAR(n_casos == 7);
 
-    std::printf("tokens | motor vs PyTorch f32 | motor vs float64 | PyTorch f32 vs float64\n");
+    std::printf("modo %s\ntokens | motor vs PyTorch f32 | motor vs float64 | PyTorch f32 vs float64\n", modo.c_str());
     for (uint32_t c = 0; c < n_casos; ++c) {
         const uint32_t n = leer<uint32_t>(f, 1)[0];
         const std::vector<int> ids = leer<int>(f, n);
         const std::vector<float> pytorch = leer<float>(f, n * V);  // PyTorch en float32
         const std::vector<float> exactos = leer<float>(f, n * V);  // PyTorch en float64, redondeado a float32
 
-        const std::vector<float> logits = modelo.forward(ids);
+        const std::vector<float> logits = incremental ? logits_incrementales(modelo, ids) : modelo.forward(ids);
         COMPROBAR(logits.size() == pytorch.size());
         const float e = error_maximo(logits, pytorch);
         std::printf("%6u | %20.2e | %16.2e | %22.2e\n", n, e, error_maximo(logits, exactos), error_maximo(pytorch, exactos));
         COMPROBAR(e <= (n == modelo.config().n_ctx ? 1e-2f : 1e-3f));
+
+        // La caché no cambia ninguna operación, solo evita repetirlas: en los casos cortos se exige
+        // que los logits incrementales sean idénticos bit a bit a los del forward completo.
+        if (incremental && n <= 64) COMPROBAR(logits == modelo.forward(ids));
     }
 
     // Entradas inválidas: contexto vacío, demasiado largo e id fuera del vocabulario.
-    const auto lanza = [&](const std::vector<int>& ids) {
-        try { modelo.forward(ids); } catch (const std::invalid_argument&) { return true; }
-        return false;
-    };
-    COMPROBAR(lanza({}));
-    COMPROBAR(lanza(std::vector<int>(1025, 0)));
-    COMPROBAR(lanza({50257}));
-    COMPROBAR(lanza({-1}));
+    if (incremental) {
+        Cache cache;
+        modelo.avanzar(cache, std::vector<int>{15496, 11});
+        COMPROBAR(lanza([&] { modelo.avanzar(cache, {}); }));
+        COMPROBAR(lanza([&] { modelo.avanzar(cache, std::vector<int>(1023, 0)); }));
+        COMPROBAR(lanza([&] { modelo.avanzar(cache, std::vector<int>{50257}); }));
+        COMPROBAR(cache.n == 2);  // una llamada rechazada deja la caché como estaba
+        Cache llena;
+        llena.n = modelo.config().n_ctx;
+        COMPROBAR(lanza([&] { modelo.avanzar(llena, std::vector<int>{0}); }));
+    } else {
+        COMPROBAR(lanza([&] { modelo.forward({}); }));
+        COMPROBAR(lanza([&] { modelo.forward(std::vector<int>(1025, 0)); }));
+        COMPROBAR(lanza([&] { modelo.forward(std::vector<int>{50257}); }));
+        COMPROBAR(lanza([&] { modelo.forward(std::vector<int>{-1}); }));
+    }
     return resumen();
 }
