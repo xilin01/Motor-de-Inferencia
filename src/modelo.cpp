@@ -1,6 +1,6 @@
 #include "modelo.hpp"
 
-#include "operaciones.hpp"
+#include "cpu.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -27,6 +27,15 @@ Modelo::Modelo(Pesos pesos) : pesos_(std::move(pesos)) {
             pesos_.tensor(p + "mlp.c_proj.weight", {C, 4 * C}), pesos_.tensor(p + "mlp.c_proj.bias", {C}),
         });
     }
+}
+
+void Modelo::configurar(const Opciones& opciones) {
+    if (opciones.matmul == Matmul::Avx2 && !cpu_tiene_avx2_fma()) throw std::runtime_error("esta CPU no soporta AVX2 y FMA");
+    nucleo_ = opciones.matmul == Matmul::Avx2 ? lineal_avx2 : lineal_ingenua;
+}
+
+void Modelo::lineal(const float* x, size_t n_filas, size_t n_in, const float* w, const float* b, size_t n_out, float* y) const {
+    nucleo_(x, n_filas, n_in, w, b, n_out, y, 0, n_out);
 }
 
 void Modelo::comprobar(size_t n_previos, std::span<const int> ids) const {
@@ -62,7 +71,7 @@ std::vector<float> Modelo::forward(std::span<const int> ids, bool solo_ultima) c
     for (const Capa& capa : capas_) {
         // 2. Atención: x += proy(atención(ln_1(x))).
         for (size_t t = 0; t < T; ++t) layernorm(&x[t * C], capa.ln1_g, capa.ln1_b, C, &norm[t * C]);
-        lineal_ingenua(norm.data(), T, C, capa.attn_w, capa.attn_b, 3 * C, qkv.data());
+        lineal(norm.data(), T, C, capa.attn_w, capa.attn_b, 3 * C, qkv.data());
 
         for (size_t h = 0; h < H; ++h) {
             for (size_t t = 0; t < T; ++t) {
@@ -88,14 +97,14 @@ std::vector<float> Modelo::forward(std::span<const int> ids, bool solo_ultima) c
                 }
             }
         }
-        lineal_ingenua(mezcla.data(), T, C, capa.attn_proy_w, capa.attn_proy_b, C, rama.data());
+        lineal(mezcla.data(), T, C, capa.attn_proy_w, capa.attn_proy_b, C, rama.data());
         for (size_t i = 0; i < T * C; ++i) x[i] += rama[i];
 
         // 3. MLP: x += proy(gelu(fc(ln_2(x)))).
         for (size_t t = 0; t < T; ++t) layernorm(&x[t * C], capa.ln2_g, capa.ln2_b, C, &norm[t * C]);
-        lineal_ingenua(norm.data(), T, C, capa.fc_w, capa.fc_b, 4 * C, oculta.data());
+        lineal(norm.data(), T, C, capa.fc_w, capa.fc_b, 4 * C, oculta.data());
         gelu(oculta.data(), T * 4 * C);
-        lineal_ingenua(oculta.data(), T, 4 * C, capa.mlp_proy_w, capa.mlp_proy_b, C, rama.data());
+        lineal(oculta.data(), T, 4 * C, capa.mlp_proy_w, capa.mlp_proy_b, C, rama.data());
         for (size_t i = 0; i < T * C; ++i) x[i] += rama[i];
     }
 
@@ -103,7 +112,7 @@ std::vector<float> Modelo::forward(std::span<const int> ids, bool solo_ultima) c
     for (size_t t = 0; t < T; ++t) layernorm(&x[t * C], lnf_g_, lnf_b_, C, &norm[t * C]);
     const size_t primera = solo_ultima ? T - 1 : 0;
     std::vector<float> logits((T - primera) * cfg.n_vocab);
-    lineal_ingenua(&norm[primera * C], T - primera, C, wte_, nullptr, cfg.n_vocab, logits.data());
+    lineal(&norm[primera * C], T - primera, C, wte_, nullptr, cfg.n_vocab, logits.data());
     return logits;
 }
 
@@ -136,7 +145,7 @@ std::vector<float> Modelo::avanzar(Cache& cache, std::span<const int> nuevos, bo
 
         // 2. Atención. Consulta, clave y valor solo de las posiciones nuevas...
         for (size_t i = 0; i < M; ++i) layernorm(&x[i * C], capa.ln1_g, capa.ln1_b, C, &norm[i * C]);
-        lineal_ingenua(norm.data(), M, C, capa.attn_w, capa.attn_b, 3 * C, qkv.data());
+        lineal(norm.data(), M, C, capa.attn_w, capa.attn_b, 3 * C, qkv.data());
 
         // ...y sus claves y valores pasan a la caché, a continuación de los que ya había.
         std::vector<float>& claves = cache.claves[l];
@@ -170,14 +179,14 @@ std::vector<float> Modelo::avanzar(Cache& cache, std::span<const int> nuevos, bo
                 }
             }
         }
-        lineal_ingenua(mezcla.data(), M, C, capa.attn_proy_w, capa.attn_proy_b, C, rama.data());
+        lineal(mezcla.data(), M, C, capa.attn_proy_w, capa.attn_proy_b, C, rama.data());
         for (size_t i = 0; i < M * C; ++i) x[i] += rama[i];
 
         // 3. MLP: actúa posición a posición, no necesita nada de las anteriores.
         for (size_t i = 0; i < M; ++i) layernorm(&x[i * C], capa.ln2_g, capa.ln2_b, C, &norm[i * C]);
-        lineal_ingenua(norm.data(), M, C, capa.fc_w, capa.fc_b, 4 * C, oculta.data());
+        lineal(norm.data(), M, C, capa.fc_w, capa.fc_b, 4 * C, oculta.data());
         gelu(oculta.data(), M * 4 * C);
-        lineal_ingenua(oculta.data(), M, 4 * C, capa.mlp_proy_w, capa.mlp_proy_b, C, rama.data());
+        lineal(oculta.data(), M, 4 * C, capa.mlp_proy_w, capa.mlp_proy_b, C, rama.data());
         for (size_t i = 0; i < M * C; ++i) x[i] += rama[i];
     }
     cache.n = N + M;
@@ -186,6 +195,6 @@ std::vector<float> Modelo::avanzar(Cache& cache, std::span<const int> nuevos, bo
     for (size_t i = 0; i < M; ++i) layernorm(&x[i * C], lnf_g_, lnf_b_, C, &norm[i * C]);
     const size_t primera = solo_ultima ? M - 1 : 0;
     std::vector<float> logits((M - primera) * cfg.n_vocab);
-    lineal_ingenua(&norm[primera * C], M - primera, C, wte_, nullptr, cfg.n_vocab, logits.data());
+    lineal(&norm[primera * C], M - primera, C, wte_, nullptr, cfg.n_vocab, logits.data());
     return logits;
 }

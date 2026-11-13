@@ -1,6 +1,7 @@
 // Muestreo (greedy, temperatura, top-k) sobre logits sintéticos y generación greedy contra PyTorch.
 #include "generar.hpp"
 #include "prueba.hpp"
+#include "variante.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -55,10 +56,12 @@ void probar_muestreo() {
     COMPROBAR(f[0] > 0.0f);
 }
 
-int main() {
+// uso: test_generacion [ingenua|avx2]
+int main(int argc, char** argv) {
     probar_muestreo();
 
-    const Modelo modelo(cargar_pesos("modelos/gpt2_124M.bin"));
+    Modelo modelo(cargar_pesos("modelos/gpt2_124M.bin"));
+    modelo.configurar(leer_variante(argc, argv, 1));
 
     // Greedy contra PyTorch: mismos tokens, uno a uno.
     std::ifstream f("tests/datos/greedy.txt");

@@ -11,8 +11,12 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 add_compile_options(/W4 /utf-8)
 
 # Todo el motor va en una biblioteca estática que comparten la CLI, los tests y el benchmark.
-add_library(motor STATIC src/pesos.cpp src/tokenizador.cpp src/operaciones.cpp src/modelo.cpp src/generar.cpp)
+add_library(motor STATIC src/pesos.cpp src/tokenizador.cpp src/operaciones.cpp src/modelo.cpp src/generar.cpp
+                         src/cpu.cpp src/lineal_avx2.cpp)
 target_include_directories(motor PUBLIC src)
+# AVX2 y FMA solo en el archivo de la capa lineal vectorizada. El resto se compila para x64 base
+# (SSE2): así la versión ingenua sigue siendo escalar y el binario arranca en cualquier CPU x64.
+set_source_files_properties(src/lineal_avx2.cpp PROPERTIES COMPILE_OPTIONS /arch:AVX2)
 
 add_executable(gpt2 src/main.cpp)
 target_link_libraries(gpt2 PRIVATE motor)
@@ -32,8 +36,15 @@ endfunction()
 prueba(test_humo)
 prueba(test_pesos)
 prueba(test_tokenizador)
+prueba(test_lineal)
 prueba(test_logits)
 prueba(test_generacion)
 
-# El mismo test de logits por el camino incremental (KV cache).
-add_test(NAME test_logits_incremental COMMAND test_logits incremental WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+# Los mismos tests del modelo para cada variante: camino incremental (KV cache) y capa lineal AVX2.
+function(variante nombre)
+    add_test(NAME ${nombre} COMMAND ${ARGN} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+endfunction()
+variante(test_logits_incremental      test_logits incremental)
+variante(test_logits_avx2             test_logits completo avx2)
+variante(test_logits_incremental_avx2 test_logits incremental avx2)
+variante(test_generacion_avx2         test_generacion avx2)

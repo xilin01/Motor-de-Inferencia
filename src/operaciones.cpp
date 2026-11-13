@@ -3,10 +3,11 @@
 #include <algorithm>
 #include <cmath>
 
-void lineal_ingenua(const float* x, size_t n_filas, size_t n_in, const float* w, const float* b, size_t n_out, float* y) {
+void lineal_ingenua(const float* x, size_t n_filas, size_t n_in, const float* w, const float* b, size_t n_out, float* y,
+                    size_t o_ini, size_t o_fin) {
     for (size_t t = 0; t < n_filas; ++t) {
         const float* xt = x + t * n_in;
-        for (size_t o = 0; o < n_out; ++o) {
+        for (size_t o = o_ini; o < o_fin; ++o) {
             const float* wo = w + o * n_in;  // fila o: los pesos de la neurona de salida o
             float suma = b ? b[o] : 0.0f;
             for (size_t k = 0; k < n_in; ++k) suma += wo[k] * xt[k];

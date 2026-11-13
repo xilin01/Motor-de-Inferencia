@@ -1,4 +1,5 @@
 // CLI: gpt2 --prompt "..." --tokens 100
+#include "cpu.hpp"
 #include "generar.hpp"
 #include "tokenizador.hpp"
 
@@ -21,7 +22,8 @@ const char* const USO =
     "  --semilla S       semilla del sorteo (por defecto 0)\n"
     "  --modelo RUTA     archivo de pesos (por defecto modelos/gpt2_124M.bin)\n"
     "  --vocab RUTA      archivo de vocabulario (por defecto modelos/gpt2_vocab.bin)\n"
-    "  --sin-cache       desactiva el KV cache: recalcula todo el contexto en cada token\n";
+    "  --sin-cache       desactiva el KV cache: recalcula todo el contexto en cada token\n"
+    "  --matmul M        ingenua o avx2 (por defecto avx2 si la CPU lo soporta)\n";
 
 // Windows entrega los argumentos en UTF-16; el motor trabaja en UTF-8.
 std::string a_utf8(const wchar_t* w) {
@@ -59,6 +61,8 @@ int wmain(int argc, wchar_t** argv) {
     int n_tokens = 100;
     Muestreo muestreo;
     bool hay_prompt = false, kv_cache = true;
+    Opciones opciones;  // por defecto, lo más rápido que soporte la máquina
+    if (cpu_tiene_avx2_fma()) opciones.matmul = Matmul::Avx2;
 
     try {
         for (int i = 1; i < argc; ++i) {
@@ -84,6 +88,10 @@ int wmain(int argc, wchar_t** argv) {
                 ruta_modelo = valor;
             } else if (opcion == "--vocab") {
                 ruta_vocab = valor;
+            } else if (opcion == "--matmul") {
+                const std::string m = a_utf8(valor);
+                if (m != "ingenua" && m != "avx2") throw std::invalid_argument("--matmul debe ser ingenua o avx2");
+                opciones.matmul = m == "avx2" ? Matmul::Avx2 : Matmul::Ingenua;
             } else {
                 throw std::invalid_argument("opción desconocida: " + opcion);
             }
@@ -99,7 +107,8 @@ int wmain(int argc, wchar_t** argv) {
 
     try {
         const Tokenizador tok(ruta_vocab);
-        const Modelo modelo(cargar_pesos(ruta_modelo));
+        Modelo modelo(cargar_pesos(ruta_modelo));
+        modelo.configurar(opciones);
 
         std::vector<int> ids = tok.codificar(prompt);
         if (ids.empty()) ids.push_back(tok.fin_de_texto());  // GPT-2 empieza los documentos con este token

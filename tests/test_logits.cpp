@@ -1,7 +1,7 @@
 // Compara los logits del motor con los de PyTorch en todas las posiciones de cada caso de referencia.
 // El archivo modelos/ref_logits.bin lo genera tools/referencias.py.
 //
-// uso: test_logits [completo|incremental]
+// uso: test_logits [completo|incremental] [ingenua|avx2]
 //   completo:     Modelo::forward sobre el contexto entero (por defecto).
 //   incremental:  Modelo::avanzar con KV cache, dando los tokens en trozos de 1 a 3.
 //
@@ -11,6 +11,7 @@
 // forward ingenuo: 7,9e-4) y 1e-2 con 1024 tokens (medido: 4,9e-3).
 #include "modelo.hpp"
 #include "prueba.hpp"
+#include "variante.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -58,12 +59,13 @@ bool lanza(F&& f) {
 int main(int argc, char** argv) {
     const std::string modo = argc > 1 ? argv[1] : "completo";
     if (modo != "completo" && modo != "incremental") {
-        std::fprintf(stderr, "uso: test_logits [completo|incremental]\n");
+        std::fprintf(stderr, "uso: test_logits [completo|incremental] [ingenua|avx2]\n");
         return 2;
     }
     const bool incremental = modo == "incremental";
 
-    const Modelo modelo(cargar_pesos("modelos/gpt2_124M.bin"));
+    Modelo modelo(cargar_pesos("modelos/gpt2_124M.bin"));
+    modelo.configurar(leer_variante(argc, argv, 2));
     const size_t V = modelo.config().n_vocab;
 
     std::ifstream f("modelos/ref_logits.bin", std::ios::binary);
@@ -72,7 +74,8 @@ int main(int argc, char** argv) {
     const uint32_t n_casos = leer<uint32_t>(f, 1)[0];
     COMPROBAR(n_casos == 7);
 
-    std::printf("modo %s\ntokens | motor vs PyTorch f32 | motor vs float64 | PyTorch f32 vs float64\n", modo.c_str());
+    std::printf("modo %s, matmul %s\n", modo.c_str(), argc > 2 ? argv[2] : "ingenua");
+    std::printf("tokens | motor vs PyTorch f32 | motor vs float64 | PyTorch f32 vs float64\n");
     for (uint32_t c = 0; c < n_casos; ++c) {
         const uint32_t n = leer<uint32_t>(f, 1)[0];
         const std::vector<int> ids = leer<int>(f, n);
