@@ -1,0 +1,11 @@
+# Compilación
+build/
+.vs/
+
+# Pesos, vocabulario y referencias de test: se generan con tools/exportar.py y tools/referencias.py
+modelos/
+
+# Notas personales de estudio
+docs/NOTAS.md
+
+__pycache__/
