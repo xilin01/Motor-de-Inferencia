@@ -4,13 +4,23 @@ Motor de inferencia de GPT-2 small (124 M de parámetros) escrito desde cero en 
 dependencias externas en el binario: tokenizador BPE, forward del transformer, generación de texto
 y tres optimizaciones para CPU medidas paso a paso (KV cache, AVX2 + FMA, varios hilos).
 
-Objetivo didáctico: entender cómo se ejecuta un transformer y cómo se optimiza en CPU. Por
-eso la versión ingenua se conserva junto a cada versión optimizada y se puede elegir al ejecutar.
+**De 0,48 a 115 tokens/s (x238) en un portátil**, con cada paso comprobado contra PyTorch: mismos
+ids de token que `transformers` en 349 textos, mismo texto con greedy y logits dentro de 1e-3 en
+prompts cortos (1e-2 con el contexto lleno).
 
 ```
 > build\Release\gpt2.exe --prompt "Hello, my name is" --tokens 20
 Hello, my name is John. I'm a writer, and I'm a writer. I'm a writer. I'm
 ```
+
+Objetivo didáctico: entender cómo se ejecuta un transformer y cómo se optimiza en CPU.
+
+- La versión ingenua se conserva junto a cada versión optimizada y se elige al ejecutar.
+- El historial tiene un commit por hito: cada optimización se lee aislada en su diff
+  (ver [Recorrido por hitos](#recorrido-por-hitos)).
+- Las velocidades de este README están medidas y se dice cómo reproducirlas. Lo que no se alcanzó
+  o no se midió está en [Tolerancia numérica](#tolerancia-numérica) y
+  [Limitaciones conocidas](#limitaciones-conocidas).
 
 ## Resultados
 
@@ -60,8 +70,8 @@ texto UTF-8
    │  Tokenizador::codificar      troceado previo + fusiones BPE
    ▼
 ids de token
-   │  Modelo::avanzar             embeddings, 12 bloques (atención + MLP), LayerNorm,
-   ▼                              cabeza guarda claves y valores de atención en la caché
+   │  Modelo::avanzar             embeddings, 12 bloques (atención + MLP), LayerNorm y
+   ▼                              cabeza. Guarda claves y valores de atención en la caché
 logits del siguiente token
    │  elegir_token                greedy, temperatura, top-k
    ▼
@@ -95,7 +105,7 @@ y las optimizadas, y los tests y el benchmark las recorren todas.
 
 - Windows 11 de 64 bits.
 - Visual Studio 2022 con el componente de C++ (incluye CMake).
-- Para la variante AVX2: CPU con AVX2 y FM. Se comprueba al arrancar, sin ellas se usa la ingenua.
+- Para la variante AVX2: CPU con AVX2 y FMA. Se comprueba al arrancar, sin ellas se usa la ingenua.
 - Python 3 con `torch`, `transformers` y `numpy`, solo para exportar los pesos y generar las
   referencias. Versiones usadas: Python 3.13, torch 2.15, transformers 5.22, tokenizers 0.23.
 
@@ -110,6 +120,23 @@ cmake --build build --config Release
 
 El ejecutable queda en `build\Release\gpt2.exe`. Se enlaza con `/MT`: solo depende de
 `KERNEL32.dll`.
+
+### Con CLion
+
+Para abrirlo en CLion:
+
+1. `File | Open` sobre la carpeta del repositorio. CLion carga `CMakeLists.txt`.
+2. En `Settings | Build, Execution, Deployment | Toolchains`, elegir la toolchain **Visual Studio**
+   con arquitectura `amd64`. La MinGW que CLion trae por defecto no sirve: `CMakeLists.txt` usa
+   opciones de MSVC (`/W4`, `/utf-8`, `/arch:AVX2`).
+3. En `Settings | Build, Execution, Deployment | CMake`, añadir un perfil **Release**. El perfil
+   por defecto es Debug (sin optimizar).
+4. En las configuraciones de ejecución de `gpt2` y `bench`, poner como *Working directory* la raíz
+   del repositorio: las rutas `modelos/...` son relativas. Los tests lanzados con CTest no lo
+   necesitan, `CMakeLists.txt` ya les fija el directorio.
+
+CLion genera con Ninja en `cmake-build-release\` y los ejecutables quedan directamente ahí
+(`cmake-build-release\gpt2.exe`), no en `build\Release\`.
 
 ## Pesos
 
@@ -235,6 +262,6 @@ tokens. El tiempo incluye procesar el prompt y no incluye cargar el modelo. Cada
 
 ## Licencia
 
-Código bajo licencia [MIT](LICENSE). 
+Código bajo licencia [MIT](LICENSE).
 
 Los pesos de GPT-2 son de OpenAI, se descargan de Hugging Face y no se distribuyen con este repositorio.
