@@ -1,5 +1,6 @@
 // Capa lineal con AVX2 + FMA. Es el único archivo que se compila con /arch:AVX2; por eso no
-// incluye cabeceras de la biblioteca estándar con código (ver docs/NOTAS.md, hito 6).
+// incluye cabeceras de la biblioteca estándar con código: el enlazador se queda con una sola copia
+// de cada función inline, y si fuera la compilada aquí, el resto del binario ejecutaría AVX.
 //
 // Intrínsecos usados, comprobados en la Intel Intrinsics Guide (datos 3.6.9), cabecera immintrin.h:
 //   _mm256_setzero_ps  (AVX)  vector de 8 floats a cero

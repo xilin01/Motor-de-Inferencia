@@ -5,7 +5,7 @@ build/
 # Pesos, vocabulario y referencias de test: se generan con tools/exportar.py y tools/referencias.py
 modelos/
 
-# Notas personales de estudio
+# Notas personales
 docs/NOTAS.md
 
 __pycache__/

@@ -54,3 +54,7 @@ variante(test_logits_avx2_hilos             test_logits completo avx2 8)
 variante(test_logits_incremental_avx2_hilos test_logits incremental avx2 8)
 variante(test_logits_incremental_ingenua_hilos test_logits incremental ingenua 8)
 variante(test_generacion_avx2_hilos         test_generacion avx2 8)
+
+# La CLI rechaza un valor numérico a medias ("0,8" no es 0). Sale antes de cargar el modelo.
+add_test(NAME cli_valor_invalido COMMAND gpt2 --prompt hi --temperatura 0,8)
+set_tests_properties(cli_valor_invalido PROPERTIES PASS_REGULAR_EXPRESSION "valor no num")

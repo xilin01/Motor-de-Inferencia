@@ -34,11 +34,15 @@ int main() {
     COMPROBAR(lanza([&] { p.tensor("no.existe", {1}); }));
 
     // Archivos inválidos: magia incorrecta y archivo truncado tras la cabecera.
-    const char* tmp = "build/test_pesos_corrupto.bin";
+    // En la carpeta temporal del sistema: build/ puede no existir si se compiló en otro directorio,
+    // y entonces el test pasaría solo porque el archivo no se puede abrir.
+    const std::filesystem::path tmp = std::filesystem::temp_directory_path() / "test_pesos_corrupto.bin";
     std::ofstream(tmp, std::ios::binary) << "NOESPESO........................";
+    COMPROBAR(std::filesystem::exists(tmp));
     COMPROBAR(lanza([&] { cargar_pesos(tmp); }));
     std::ofstream(tmp, std::ios::binary).write("GPT2PESO\1\0\0\0", 12);
     COMPROBAR(lanza([&] { cargar_pesos(tmp); }));
+    std::filesystem::remove(tmp);
     COMPROBAR(lanza([&] { cargar_pesos("modelos/no_existe.bin"); }));
     return resumen();
 }

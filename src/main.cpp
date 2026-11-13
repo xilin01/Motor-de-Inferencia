@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cwchar>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -78,17 +79,20 @@ int wmain(int argc, wchar_t** argv) {
             }
             if (i + 1 >= argc) throw std::invalid_argument("falta el valor de " + opcion);
             const wchar_t* valor = argv[++i];
+            // std::stoi y compañía se paran en el primer carácter que no entienden: "0,8" sería 0.
+            // Se anota hasta dónde han leído para rechazar el valor si sobra algo.
+            size_t leidos = std::wcslen(valor);
             if (opcion == "--prompt") {
                 prompt = a_utf8(valor);
                 hay_prompt = true;
             } else if (opcion == "--tokens") {
-                n_tokens = std::stoi(valor);
+                n_tokens = std::stoi(valor, &leidos);
             } else if (opcion == "--temperatura") {
-                muestreo.temperatura = std::stof(valor);
+                muestreo.temperatura = std::stof(valor, &leidos);
             } else if (opcion == "--top-k") {
-                muestreo.top_k = std::stoi(valor);
+                muestreo.top_k = std::stoi(valor, &leidos);
             } else if (opcion == "--semilla") {
-                muestreo.semilla = std::stoull(valor);
+                muestreo.semilla = std::stoull(valor, &leidos);
             } else if (opcion == "--modelo") {
                 ruta_modelo = valor;
             } else if (opcion == "--vocab") {
@@ -98,13 +102,15 @@ int wmain(int argc, wchar_t** argv) {
                 if (m != "ingenua" && m != "avx2") throw std::invalid_argument("--matmul debe ser ingenua o avx2");
                 opciones.matmul = m == "avx2" ? Matmul::Avx2 : Matmul::Ingenua;
             } else if (opcion == "--hilos") {
-                opciones.hilos = std::stoi(valor);
+                opciones.hilos = std::stoi(valor, &leidos);
             } else {
                 throw std::invalid_argument("opción desconocida: " + opcion);
             }
+            if (valor[leidos] != L'\0') throw std::invalid_argument("valor no numérico para " + opcion + ": " + a_utf8(valor));
         }
         if (!hay_prompt) throw std::invalid_argument("falta --prompt");
-        if (n_tokens < 0 || muestreo.temperatura < 0.0f || muestreo.top_k < 0) {
+        // La temperatura se compara al revés para rechazar también NaN.
+        if (n_tokens < 0 || !(muestreo.temperatura >= 0.0f) || muestreo.top_k < 0) {
             throw std::invalid_argument("--tokens, --temperatura y --top-k no pueden ser negativos");
         }
     } catch (const std::exception& e) {  // incluye los errores de std::stoi y std::stof
