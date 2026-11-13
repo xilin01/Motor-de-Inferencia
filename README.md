@@ -29,6 +29,11 @@ Objetivo didáctico: entender cómo se ejecuta un transformer y cómo se optimiz
 Tokens generados por segundo. Cada fila añade una optimización a las anteriores. Todas las cifras
 de la tabla están medidas con `bench.exe` en la máquina descrita arriba (ninguna es estimada).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/tokens_por_segundo_oscuro.svg">
+  <img src="docs/tokens_por_segundo_claro.svg" width="720" alt="Gráfica de barras con los tokens por segundo de cada variante: de 0,48 la ingenua a 115 con KV cache, AVX2 y 6 hilos. Las cifras son las de la tabla siguiente.">
+</picture>
+
 | Variante            | Hilos | tokens/s | Frente a la base | Frente a 1 hilo |
 | ------------------- | ----: | -------: | ---------------: | --------------: |
 | Ingenua, sin caché |     1 |     0,48 |             x1,0 |                 |
@@ -85,6 +90,7 @@ id nuevo ──► Tokenizador::decodificar ──► texto
 | `tools/exportar.py`       | Descarga los pesos oficiales y los escribe en el formato binario propio         |
 | `tools/tablas_unicode.py` | Genera `src/unicode_tablas.hpp` (clases de caracteres del tokenizador)        |
 | `tools/referencias.py`    | Genera con PyTorch y `transformers` los datos de referencia de los tests      |
+| `tools/grafica.py`        | Dibuja con matplotlib la gráfica de tokens/s de este README (`docs/*.svg`)     |
 | `src/pesos.cpp`           | Cargador del archivo de pesos con validación y suma de control                |
 | `src/tokenizador.cpp`     | BPE a nivel de bytes: codificar y decodificar                                   |
 | `src/operaciones.cpp`     | Capa lineal ingenua, LayerNorm, GELU, softmax                                   |
@@ -108,6 +114,8 @@ y las optimizadas, y los tests y el benchmark las recorren todas.
 - Para la variante AVX2: CPU con AVX2 y FMA. Se comprueba al arrancar, sin ellas se usa la ingenua.
 - Python 3 con `torch`, `transformers` y `numpy`, solo para exportar los pesos y generar las
   referencias. Versiones usadas: Python 3.13, torch 2.15, transformers 5.22, tokenizers 0.23.
+  Para regenerar la gráfica de Resultados (`python tools/grafica.py`) hace falta además
+  `matplotlib` (usada la 3.11).
 
 ## Cómo compilar
 
