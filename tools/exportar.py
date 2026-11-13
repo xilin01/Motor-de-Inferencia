@@ -21,7 +21,7 @@ def escribir_pesos(modelo: GPT2LMHeadModel, ruta: Path) -> None:
     cabeza = estado.pop('lm_head.weight')
 
     if not np.array_equal(cabeza, estado['wte.weight']): raise ValueError('La cabeza final no comparte pesos con wte.')
-    if cfg.activation_function != 'gelu_new' or cfg.layer_norm_epsilon != 1e-5: raise ValueError('Activación o epsilon distintos de los que implementa el motor.')
+    if cfg.activation_function != 'gelu_new' or cfg.layer_norm_epsilon != 1e-5: raise ValueError('Activación o epsilon distintos de los del motor.')
     with open(ruta, 'wb') as f:
         f.write(struct.pack('<8s7I', b'GPT2PESO', VERSION, cfg.vocab_size, cfg.n_positions, cfg.n_embd, cfg.n_layer, cfg.n_head, len(estado)))
         for nombre, t in estado.items():

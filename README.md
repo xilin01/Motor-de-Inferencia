@@ -15,7 +15,7 @@ Hello, my name is John. I'm a writer, and I'm a writer. I'm a writer. I'm
 ## Resultados
 
 Tokens generados por segundo. Cada fila añade una optimización a las anteriores. Todas las cifras
-están medidas con `bench.exe` en la máquina descrita debajo; ninguna es estimada.
+de la tabla están medidas con `bench.exe` en la máquina descrita debajo; ninguna es estimada.
 
 | Variante | Hilos | tokens/s | Frente a la base | Frente a 1 hilo |
 |---|---:|---:|---:|---:|
@@ -47,11 +47,14 @@ generados con greedy, mediana de 3 repeticiones.
 - *Comprobación del límite de memoria.* Con el mismo núcleo AVX2 y un hilo, el motor hace 25 mil
   millones de multiplicaciones-suma por segundo procesando de golpe un prompt de 181 tokens (cada
   peso se reutiliza 181 veces desde la caché del procesador) y 8 mil millones generando token a
-  token (cada peso se lee de RAM una vez).
+  token (cada peso se lee de RAM una vez). Estas dos cifras no salen de `bench.exe`: se midieron
+  con `gpt2.exe --hilos 1`, la primera con un prompt de 181 tokens y `--tokens 1` (0,61 s) y la
+  segunda con un prompt de 5 tokens y `--tokens 200` (64,7 tokens/s).
 
-**Variabilidad.** La fila sin caché es la menos estable: en dos medidas anteriores de una sola
-repetición dio 0,39 y 0,41 tokens/s. Las demás filas se repitieron con diferencias de hasta el 5 %
-(KV cache ingenuo) y menores del 3 % (AVX2 y hilos) entre ejecuciones del benchmark.
+**Variabilidad.** En dos medidas anteriores de una sola repetición la fila sin caché dio 0,39 y
+0,41 tokens/s, pero se tomaron con otras tareas en marcha en la máquina, así que no sirven para
+juzgar su estabilidad. Las demás filas se repitieron con diferencias de hasta el 5 % (KV cache
+ingenuo) y menores del 3 % (AVX2 y hilos) entre ejecuciones del benchmark.
 
 ## Arquitectura
 

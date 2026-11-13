@@ -1,5 +1,6 @@
 """Genera src/unicode_tablas.hpp con los rangos de letras, números y espacios que distingue el pre-tokenizador de referencia."""
 from pathlib import Path
+import tokenizers
 from tokenizers.pre_tokenizers import PreTokenizer
 from transformers import GPT2Tokenizer
 
@@ -38,7 +39,6 @@ def tabla_cpp(nombre: str, rangos: Rangos) -> str:
 
 
 if __name__ == '__main__':
-    import tokenizers
     pre = GPT2Tokenizer.from_pretrained('gpt2').backend_tokenizer.pre_tokenizer
     puntos = {'letra': [], 'numero': [], 'espacio': [], 'otro': []}
 
@@ -48,7 +48,8 @@ if __name__ == '__main__':
     cabecera = (f'// GENERADO por tools/tablas_unicode.py a partir del pre-tokenizador de tokenizers {tokenizers.__version__}. No editar.\n'
                 '// Rangos cerrados de puntos de código, ordenados: \\p{L}, \\p{N} y \\s del patrón de GPT-2.\n'
                 '#pragma once\n\nstruct Rango {\n    char32_t ini, fin;\n};\n\n')
-    RUTA_SALIDA.write_text(cabecera + '\n'.join([tabla_cpp('LETRAS', letras), tabla_cpp('NUMEROS', numeros), tabla_cpp('ESPACIOS', espacios)]), encoding='utf-8', newline='\n')
+    tablas = '\n'.join([tabla_cpp('LETRAS', letras), tabla_cpp('NUMEROS', numeros), tabla_cpp('ESPACIOS', espacios)])
+    RUTA_SALIDA.write_text(cabecera + tablas, encoding='utf-8', newline='\n')
     print(f'[tablas] letras: {len(puntos["letra"])} en {len(letras)} rangos | numeros: {len(puntos["numero"])} en {len(numeros)} rangos | '
           f'espacios: {len(puntos["espacio"])} en {len(espacios)} rangos -> {RUTA_SALIDA}')
     print(f'[tablas] espacios: {" ".join(f"U+{p:04X}" for p in puntos["espacio"])}')

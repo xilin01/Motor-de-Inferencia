@@ -5,7 +5,9 @@
 //   _mm256_setzero_ps  (AVX)  vector de 8 floats a cero
 //   _mm256_loadu_ps    (AVX)  carga 8 floats; la dirección no necesita alineación
 //   _mm256_storeu_ps   (AVX)  guarda 8 floats; la dirección no necesita alineación
-//   _mm256_fmadd_ps    (FMA)  a*b + c en los 8 floats, con un solo redondeo
+//   _mm256_fmadd_ps    (FMA)  a*b + c en los 8 floats
+// La guía no habla del redondeo de fmadd. Que el producto no se redondea antes de sumar es la
+// definición de "fused multiply-add" de IEEE 754-2008, no un dato sacado de la guía.
 #include "operaciones.hpp"
 
 #include <immintrin.h>

@@ -1,8 +1,8 @@
 """Genera con las implementaciones de referencia (transformers y PyTorch) los datos contra los que se prueban los tests de C++."""
 import random
 import struct
-import torch
 from pathlib import Path
+import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
 
@@ -13,23 +13,27 @@ N_CTX = 1024
 N_GREEDY = 12
 PROMPTS_GREEDY = ['Hello, my name is', 'The capital of France is', '!']
 TEXTOS = ['', ' ', '  ', 'a', 'Hello, world!', 'Hello  world', '  dos espacios delante', 'espacios detrás   ', 'línea uno\nlínea dos\n\n\nlínea cinco',
-          '\ttabulador\ty\r\nretorno de carro', "I'm sure they've said it's fine, we'll see, he'd know, don't, you're", "'s 't 're 've 'm 'll 'd", "I'M SURE IT'S DON'T",
-          "''s' 'll'll x'y !'s", 'El pingüino comió ñandú en Düsseldorf: ¿qué tal? ¡Genial!', 'naïve café résumé façade Ærøskøbing',
+          '\ttabulador\ty\r\nretorno de carro', "I'm sure they've said it's fine, we'll see, he'd know, don't, you're", "'s 't 're 've 'm 'll 'd",
+          "I'M SURE IT'S DON'T", "''s' 'll'll x'y !'s", 'El pingüino comió ñandú en Düsseldorf: ¿qué tal? ¡Genial!', 'naïve café résumé façade Ærøskøbing',
           'Precio: 1.234,56 € (el 12/11/2026 a las 09:30)', '3.14159 2^10=1024 1e-4 0x1F ½ ² ٣ Ⅷ ④', '北京是中华人民共和国的首都。', 'こんにちは世界、ありがとう！', '안녕하세요 세계',
-          'Привет, мир! Как дела?', 'Γειά σου Κόσμε', 'مرحبا بالعالم', 'שלום עולם', 'नमस्ते दुनिया', 'สวัสดีชาวโลก', '😀 🎉 emoji 👍🏽 familia 👨‍👩‍👧‍👦 bandera 🇪🇸 corazón ❤️',
+          'Привет, мир! Как дела?', 'Γειά σου Κόσμε', 'مرحبا بالعالم', 'שלום עולם', 'नमस्ते दुनिया', 'สวัสดีชาวโลก',
+          '😀 🎉 emoji 👍🏽 familia 👨‍👩‍👧‍👦 bandera 🇪🇸 corazón ❤️',
           'e\N{COMBINING ACUTE ACCENT} combinado y é precompuesto',
           'espacio\xa0duro, espacio\N{IDEOGRAPHIC SPACE}ideográfico, fino\N{THIN SPACE}aquí y\N{LINE SEPARATOR}separador',
           'ancho\N{ZERO WIDTH SPACE}cero y BOM\N{ZERO WIDTH NO-BREAK SPACE} dentro', 'control \x00 \x1c \x7f \x85 fin',
           'for (int i = 0; i < n; ++i) { x[i] += 1.0f; }  // código', 'https://example.com/ruta?a=1&b=dos#ancla',
           'snake_case camelCase SCREAMING_CASE kebab-case', '!!! ??? ... --- *** ((())) [[]] {{}} <<>>', 'a' * 300, ' ' * 50 + 'fin', 'ab ' * 100, '\n' * 20,
-          'Texto antes<|endoftext|>Texto después', '<|endoftext|>', '<|endoftext|><|endoftext|> x', '<|endoftext', 'supercalifragilisticoespialidoso antidisestablishmentarianism',
-          'The quick brown fox jumps over the lazy dog.', 'MAYÚSCULAS minúsculas MiXtO', '𝕳𝖊𝖑𝖑𝖔 𝒲ℴ𝓇𝓁𝒹 fuera del plano básico 𐍈', '\U0010ffff\U0000e000 uso privado y último punto']
-INVISIBLES = ['\N{OGHAM SPACE MARK}', '\N{EM SPACE}', '\N{LINE SEPARATOR}', '\N{PARAGRAPH SEPARATOR}', '\N{NARROW NO-BREAK SPACE}', '\N{MEDIUM MATHEMATICAL SPACE}',
-              '\N{IDEOGRAPHIC SPACE}', '\N{ZERO WIDTH SPACE}', '\N{ZERO WIDTH JOINER}', '\N{VARIATION SELECTOR-16}', '\N{COMBINING ACUTE ACCENT}', '\N{COMBINING DIAERESIS}']
+          'Texto antes<|endoftext|>Texto después', '<|endoftext|>', '<|endoftext|><|endoftext|> x', '<|endoftext',
+          'supercalifragilisticoespialidoso antidisestablishmentarianism', 'The quick brown fox jumps over the lazy dog.', 'MAYÚSCULAS minúsculas MiXtO',
+          '𝕳𝖊𝖑𝖑𝖔 𝒲ℴ𝓇𝓁𝒹 fuera del plano básico 𐍈', '\U0010ffff\U0000e000 uso privado y último punto']
+INVISIBLES = ['\N{OGHAM SPACE MARK}', '\N{EM SPACE}', '\N{LINE SEPARATOR}', '\N{PARAGRAPH SEPARATOR}', '\N{NARROW NO-BREAK SPACE}',
+              '\N{MEDIUM MATHEMATICAL SPACE}', '\N{IDEOGRAPHIC SPACE}', '\N{ZERO WIDTH SPACE}', '\N{ZERO WIDTH JOINER}', '\N{VARIATION SELECTOR-16}',
+              '\N{COMBINING ACUTE ACCENT}', '\N{COMBINING DIAERESIS}']
 ALFABETO = (list('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') + list(' ' * 12) + list("''.,;:!?-_()[]{}<>|/@#$%^&*+=~`") + ['"', chr(92)] +
             list('\n\t\r\x0b\x0c\x1c\x85\xa0') + INVISIBLES + list('áéíóúñüçßøæÁÉÑ') + list('αβγδΩЖдяш') + list('中文字日本語かなカナ한글') + list('مرحباשלוםनमस्ते') +
             list('½²³٣Ⅷ④०९') + list('😀🎉👍🏽❤👨👩🇪🇸𝕳𐍈') + ["'s", "'t", "'re", "'ve", "'m", "'ll", "'d", '<|endoftext|>'])
-PROMPTS = ['Hello, my name is', 'The capital of France is', 'En un lugar de la Mancha, de cuyo nombre no quiero acordarme, no ha mucho tiempo que vivía un hidalgo',
+PROMPTS = ['Hello, my name is', 'The capital of France is',
+           'En un lugar de la Mancha, de cuyo nombre no quiero acordarme, no ha mucho tiempo que vivía un hidalgo',
            'def fibonacci(n):\n    if n < 2:\n        return n\n    return', '日本語のテキストと emoji 🎉 mezclados', '!']
 
 
