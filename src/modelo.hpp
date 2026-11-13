@@ -22,8 +22,10 @@ public:
 
     // Forward ingenuo: recalcula todo el contexto. Devuelve los logits de todas las posiciones,
     // [n_tokens, n_vocab] en fila-mayor: la fila t predice el token t + 1.
+    // Con solo_ultima se devuelve únicamente la última fila, [n_vocab]: es lo que necesita la
+    // generación, y ahorra aplicar la cabeza final a las demás posiciones.
     // Lanza std::invalid_argument si ids está vacío, supera n_ctx o contiene un id inválido.
-    std::vector<float> forward(std::span<const int> ids) const;
+    std::vector<float> forward(std::span<const int> ids, bool solo_ultima = false) const;
 
     const Config& config() const { return pesos_.config; }
 

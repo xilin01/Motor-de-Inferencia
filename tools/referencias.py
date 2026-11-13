@@ -10,6 +10,8 @@ RAIZ = Path(__file__).resolve().parent.parent
 SEMILLA = 2106
 N_ALEATORIOS = 300
 N_CTX = 1024
+N_GREEDY = 12
+PROMPTS_GREEDY = ['Hello, my name is', 'The capital of France is', '!']
 TEXTOS = ['', ' ', '  ', 'a', 'Hello, world!', 'Hello  world', '  dos espacios delante', 'espacios detrás   ', 'línea uno\nlínea dos\n\n\nlínea cinco',
           '\ttabulador\ty\r\nretorno de carro', "I'm sure they've said it's fine, we'll see, he'd know, don't, you're", "'s 't 're 've 'm 'll 'd", "I'M SURE IT'S DON'T",
           "''s' 'll'll x'y !'s", 'El pingüino comió ñandú en Düsseldorf: ¿qué tal? ¡Genial!', 'naïve café résumé façade Ærøskøbing',
@@ -51,18 +53,32 @@ def escribir_tokenizador(tok: GPT2Tokenizer, ruta: Path) -> None:
     print(f'[tokenizador] {len(textos)} casos -> {ruta}')
 
 
-def escribir_logits(tok: GPT2Tokenizer, ruta: Path) -> None:
+def escribir_greedy(tok: GPT2Tokenizer, modelo: GPT2LMHeadModel, ruta: Path) -> None:
+    """Escribe dos líneas por caso: los ids del prompt y los ids que añade la generación greedy, que es el argmax de los logits de la última posición."""
+    lineas = ['# Generado por tools/referencias.py. Por caso: ids del prompt e ids generados con greedy por PyTorch.']
+
+    for prompt in PROMPTS_GREEDY:
+        ids = tok.encode(prompt)
+        n = len(ids)
+
+        for _ in range(N_GREEDY): ids.append(int(modelo(torch.tensor([ids])).logits[0, -1].argmax()))
+        lineas += [' '.join(str(i) for i in ids[:n]), ' '.join(str(i) for i in ids[n:])]
+        print(f'[greedy] {prompt!a} -> {tok.decode(ids[n:])!a}')
+    ruta.write_text('\n'.join(lineas) + '\n', encoding='utf-8', newline='\n')
+    print(f'[greedy] {len(PROMPTS_GREEDY)} casos -> {ruta}')
+
+
+def escribir_logits(tok: GPT2Tokenizer, modelo: GPT2LMHeadModel, ruta: Path) -> None:
     """
     Escribe por caso los ids y los logits de PyTorch en todas las posiciones, calculados en float32 y en float64; el último caso llena el contexto máximo.
     Los de float64 se guardan redondeados a float32 y hacen de valor exacto: permiten medir el error propio de PyTorch en float32.
     """
-    modelo = GPT2LMHeadModel.from_pretrained('gpt2').eval()
     doble = GPT2LMHeadModel.from_pretrained('gpt2').double().eval()
     largo = tok.encode(' '.join(TEXTOS[4:36]) * 4)[:N_CTX]
     casos = [tok.encode(p) for p in PROMPTS] + [largo]
 
     if len(largo) != N_CTX: raise ValueError('El caso largo no llena el contexto.')
-    with open(ruta, 'wb') as f, torch.no_grad():
+    with open(ruta, 'wb') as f:
         f.write(struct.pack('<8sI', b'GPT2REFL', len(casos)))
         for ids in casos:
             entrada = torch.tensor([ids])
@@ -76,6 +92,9 @@ def escribir_logits(tok: GPT2Tokenizer, ruta: Path) -> None:
 
 
 if __name__ == '__main__':
+    torch.set_grad_enabled(False)
     tok = GPT2Tokenizer.from_pretrained('gpt2')
+    modelo = GPT2LMHeadModel.from_pretrained('gpt2').eval()
     escribir_tokenizador(tok, RAIZ / 'tests' / 'datos' / 'tokenizador.txt')
-    escribir_logits(tok, RAIZ / 'modelos' / 'ref_logits.bin')
+    escribir_greedy(tok, modelo, RAIZ / 'tests' / 'datos' / 'greedy.txt')
+    escribir_logits(tok, modelo, RAIZ / 'modelos' / 'ref_logits.bin')

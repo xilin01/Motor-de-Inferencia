@@ -28,7 +28,7 @@ Modelo::Modelo(Pesos pesos) : pesos_(std::move(pesos)) {
     }
 }
 
-std::vector<float> Modelo::forward(std::span<const int> ids) const {
+std::vector<float> Modelo::forward(std::span<const int> ids, bool solo_ultima) const {
     const Config& cfg = pesos_.config;
     const size_t T = ids.size();         // tokens del contexto
     const size_t C = cfg.n_embd;         // dimensión del modelo
@@ -95,7 +95,8 @@ std::vector<float> Modelo::forward(std::span<const int> ids) const {
 
     // 4. LayerNorm final y cabeza: logits[t][v] = wte[v] · ln_f(x[t]). La cabeza reutiliza wte.
     for (size_t t = 0; t < T; ++t) layernorm(&x[t * C], lnf_g_, lnf_b_, C, &norm[t * C]);
-    std::vector<float> logits(T * cfg.n_vocab);
-    lineal_ingenua(norm.data(), T, C, wte_, nullptr, cfg.n_vocab, logits.data());
+    const size_t primera = solo_ultima ? T - 1 : 0;
+    std::vector<float> logits((T - primera) * cfg.n_vocab);
+    lineal_ingenua(&norm[primera * C], T - primera, C, wte_, nullptr, cfg.n_vocab, logits.data());
     return logits;
 }

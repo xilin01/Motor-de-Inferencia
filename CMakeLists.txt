@@ -11,11 +11,14 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 add_compile_options(/W4 /utf-8)
 
 # Todo el motor va en una biblioteca estática que comparten la CLI, los tests y el benchmark.
-add_library(motor STATIC src/pesos.cpp src/tokenizador.cpp src/operaciones.cpp src/modelo.cpp)
+add_library(motor STATIC src/pesos.cpp src/tokenizador.cpp src/operaciones.cpp src/modelo.cpp src/generar.cpp)
 target_include_directories(motor PUBLIC src)
 
 add_executable(gpt2 src/main.cpp)
 target_link_libraries(gpt2 PRIVATE motor)
+
+add_executable(bench bench/bench.cpp)
+target_link_libraries(bench PRIVATE motor)
 
 # Tests: un ejecutable por área, lanzados desde la raíz para que encuentren modelos/ y tests/datos/.
 enable_testing()
@@ -30,3 +33,4 @@ prueba(test_humo)
 prueba(test_pesos)
 prueba(test_tokenizador)
 prueba(test_logits)
+prueba(test_generacion)
